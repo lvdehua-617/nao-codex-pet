@@ -1,0 +1,21 @@
+{
+  "name": "nao-companion",
+  "version": "0.1.0",
+  "description": "Connect Codex task status, timers and local memory to the Nao desktop companion.",
+  "author": {
+    "name": "lvdehua-617",
+    "url": "https://github.com/lvdehua-617"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "奈绪助手",
+    "shortDescription": "让奈绪显示任务状态、提醒与本地记忆。",
+    "longDescription": "连接 Codex 与奈绪桌面助手，提供任务状态气泡、番茄钟、角色化回应和本地记忆。",
+    "developerName": "lvdehua-617",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "brandColor": "#B64A58",
+    "defaultPrompt": ["让奈绪陪我完成这个任务。", "让奈绪开始一个 25 分钟番茄钟。", "查看奈绪的本地待办和好感度。"]
+  },
+  "mcpServers": "./.mcp.json"
+}

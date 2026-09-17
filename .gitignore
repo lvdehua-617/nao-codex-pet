@@ -2,4 +2,6 @@
 Thumbs.db
 *.tmp
 *.log
-
+.qa-deps/
+__pycache__/
+*.pyc

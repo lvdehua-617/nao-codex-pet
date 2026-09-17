@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nao": {
+      "command": "python",
+      "args": ["${__dirname}/scripts/nao_mcp.py"]
+    }
+  }
+}
