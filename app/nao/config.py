@@ -26,4 +26,7 @@ DEFAULT_DATA = {
     "todos": [], "calendar": [], "clipboard": [],
     "affection": {"points": 0, "interactions": 0, "last_day": ""},
     "timer": None,
+    "reminders": {
+        "water": {"enabled": False, "interval_minutes": 45, "next_at": None},
+    },
 }

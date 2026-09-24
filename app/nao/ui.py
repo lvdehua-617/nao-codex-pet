@@ -11,12 +11,13 @@ from .config import COMMAND_DIR, DATA_FILE
 from .speech import SpeechService
 from .storage import Store
 from .system_tools import fetch_weather_async, media_key
-from .timers import TIMER_LABELS, TimerService
+from .timers import TIMER_LABELS, TimerService, WaterReminderService
 
 class NaoApp:
     def __init__(self):
         self.store = Store()
         self.timer_service = TimerService(self.store)
+        self.water_service = WaterReminderService(self.store)
         self.speech_service = SpeechService()
         self.ai_client = AIClient()
         self.root = tk.Tk()
@@ -49,14 +50,15 @@ class NaoApp:
         self.sprite.bind("<ButtonRelease-1>", lambda _e: setattr(self, "drag_xy", None))
         self.animator.start()
         self.root.after(500, self.poll)
+        self._restore_state()
         self.root.after(1000, self.tick)
-        self.say("主人，奈绪已经准备好了。双击我可以打开控制面板。", speak=False)
 
     def build_menu(self):
         self.menu = tk.Menu(self.root, tearoff=False)
         self.menu.add_command(label="控制面板", command=self.open_panel)
         self.menu.add_command(label="开始 25 分钟专注", command=lambda: self.start_timer("focus", 25))
-        self.menu.add_command(label="喝水提醒", command=lambda: self.start_timer("water", self.store.data["settings"]["water_minutes"]))
+        self.menu.add_command(label="开启周期喝水提醒", command=self.enable_water_reminder)
+        self.menu.add_command(label="关闭周期喝水提醒", command=self.disable_water_reminder)
         self.menu.add_separator()
         self.menu.add_command(label="播放 / 暂停音乐", command=lambda: self.media_key(0xB3))
         self.menu.add_command(label="下一首", command=lambda: self.media_key(0xB0))
@@ -117,15 +119,57 @@ class NaoApp:
         status = self.timer_service.status()
         if status and status["finished"]:
             self.say(status["message"], "wave", True)
+        elif status and status.get("paused"):
+            minutes, seconds = divmod(status["remaining"], 60)
+            self.bubble.config(text=f"{TIMER_LABELS[status['kind']]}已暂停 · {minutes:02d}:{seconds:02d}")
+            self.animator.set_state("waiting", 0)
         elif status:
             minutes, seconds = divmod(status["remaining"], 60)
             self.bubble.config(text=f"{TIMER_LABELS[status['kind']]}中 · {minutes:02d}:{seconds:02d}\n奈绪会安静陪着你。")
             self.animator.set_state("working", 0)
+        water = self.water_service.status()
+        if water and water["due"]:
+            self.say("喝水时间到啦！就算很忙也要照顾好自己，哼。", "wave", True)
         self.root.after(1000, self.tick)
+
+    def _restore_state(self):
+        status = self.timer_service.status()
+        if status and status["finished"]:
+            message = status["message"] if status["overdue"] <= 8 * 3600 else "上次计时已经过期，奈绪帮你清理掉啦。"
+            self.say(message, "wave", False)
+        elif status:
+            minutes, seconds = divmod(status["remaining"], 60)
+            suffix = "已暂停" if status.get("paused") else "已恢复"
+            self.say(f"{TIMER_LABELS[status['kind']]}{suffix} · {minutes:02d}:{seconds:02d}",
+                     "waiting" if status.get("paused") else "working", False)
+        else:
+            self.say("主人，奈绪已经准备好了。双击我可以打开控制面板。", speak=False)
+        water = self.water_service.status()
+        if water and water["due"]:
+            self.say("回来啦？先喝口水吧，错过的提醒奈绪只补这一次。", "wave", False)
 
     def start_timer(self, kind, minutes):
         self.timer_service.start(kind, minutes)
         self.say(f"{TIMER_LABELS.get(kind, '计时')}开始，{minutes} 分钟后奈绪叫你。", "wave", False)
+
+    def pause_timer(self):
+        if self.timer_service.pause(): self.say("计时暂停了。休息一下也不是不可以啦。", "waiting", False)
+
+    def resume_timer(self):
+        if self.timer_service.resume(): self.say("继续计时，奈绪会陪你坚持下去。", "working", False)
+
+    def cancel_timer(self):
+        self.timer_service.cancel()
+        self.say("计时已经取消。才没有失望呢……", "idle", False)
+
+    def enable_water_reminder(self):
+        minutes = self.store.data["settings"]["water_minutes"]
+        self.water_service.enable(minutes)
+        self.say(f"每 {minutes} 分钟提醒一次喝水，交给奈绪吧。", "wave", False)
+
+    def disable_water_reminder(self):
+        self.water_service.disable()
+        self.say("周期喝水提醒已经关闭。记得自己喝水哦。", "idle", False)
 
     def nickname(self):
         return self.store.data["profile"].get("nickname") or "主人"
@@ -200,6 +244,10 @@ class NaoApp:
         ttk.Button(home, text="🎙 点击说话", command=self.listen).pack(pady=6)
         ttk.Button(home, text="开始专注", command=lambda: self.start_timer("focus", self.store.data["settings"]["focus_minutes"])).pack(pady=6)
         ttk.Button(home, text="开始休息", command=lambda: self.start_timer("rest", self.store.data["settings"]["rest_minutes"])).pack(pady=6)
+        timer_controls = ttk.Frame(home); timer_controls.pack(pady=6)
+        ttk.Button(timer_controls, text="暂停", command=self.pause_timer).pack(side="left", padx=3)
+        ttk.Button(timer_controls, text="继续", command=self.resume_timer).pack(side="left", padx=3)
+        ttk.Button(timer_controls, text="取消", command=self.cancel_timer).pack(side="left", padx=3)
 
         todo_list = tk.Listbox(tasks, height=8); todo_list.pack(fill="x", padx=12, pady=10)
         def refresh_todos():
@@ -239,6 +287,12 @@ class NaoApp:
         clip = tk.BooleanVar(value=self.store.data["settings"]["clipboard_history"])
         def set_clip(): self.store.data["settings"]["clipboard_history"] = clip.get(); self.store.save()
         ttk.Checkbutton(tools, text="记录剪贴板历史（最多 30 条，仅本机）", variable=clip, command=set_clip).pack(pady=14)
+        water = self.store.data["reminders"]["water"]
+        water_enabled = tk.BooleanVar(value=water["enabled"])
+        def toggle_water():
+            self.enable_water_reminder() if water_enabled.get() else self.disable_water_reminder()
+        ttk.Checkbutton(tools, text=f"周期喝水提醒（每 {water['interval_minutes']} 分钟）",
+                        variable=water_enabled, command=toggle_water).pack(pady=6)
 
         ttk.Label(wardrobe, text="制服", font=("Microsoft YaHei UI", 13)).pack(pady=(25, 5))
         ttk.Label(wardrobe, text="当前已安装 · 完整动画资源").pack()
