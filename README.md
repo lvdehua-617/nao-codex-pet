@@ -74,6 +74,9 @@ pet/spritesheet.webp  -> ~/.codex/pets/nao/spritesheet.webp
 ## 文件
 
 - `pet/`：可直接安装的桌宠包
+- `app/nao/`：按界面、动画、计时、存储、语音、AI 和系统工具拆分的桌面程序
+- `plugins/`：Codex 状态桥接插件与 MCP 服务
+- `tests/`：不依赖桌面界面的核心服务测试
 - `previews/`：动作总览和动画示例
 - `install.ps1`：Windows 安装脚本
 
